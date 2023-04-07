@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEVC Helper</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat&family=Zilla+Slab&display=swap');
+        h1 {
+            font-family: "Zilla Slab", serif;
+            font-size: 36pt;
+            width: max-content;
+            margin: auto;
+        }
+        a {
+            font-family: Montserrat, sans-serif;
+            font-size: 24pt;
+            width: max-content;
+            margin: auto;
+        }
+        div.vflex {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>TEVC Helper</h1>
+    <div class="vflex">
+        {% for filename in filenames %}
+            <a href="/process/{{filename}}">{{filename}}</a>
+        {% endfor %}
+    </div>
+</body>
+</html>
