@@ -6,7 +6,7 @@ import pandas as pd
 import re
 import altair as alt
 from glob import glob
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, render_template, send_from_directory
 
 
 try:
@@ -29,8 +29,8 @@ dfs = {}
 def abf_to_df(
     filename:str,
     current_channel:int = 0,
-    voltage_channel:int = 1,
-    barrel_channel:int = 3
+    voltage_channel:int = 1
+    # barrel_channel:int = 3
 ) -> pd.DataFrame:
     abf = pyabf.ABF(filename)
 
@@ -60,11 +60,11 @@ def abf_to_df(
             voltage_label = abf.sweepLabelY
         except ValueError:
             print(f'Warning: failed to access given channel for voltage in {filename}, sweep {sweep}')
-        try:
-            abf.setSweep(sweep, channel = barrel_channel)
-            recordings['Barrel'].extend(abf.sweepY)
-        except ValueError:
-            print(f'Warning: failed to access given channel for barrel in {filename}, sweep {sweep}')
+        # try:
+        #     abf.setSweep(sweep, channel = barrel_channel)
+        #     recordings['Barrel'].extend(abf.sweepY)
+        # except ValueError:
+        #     print(f'Warning: failed to access given channel for barrel in {filename}, sweep {sweep}')
 
 
 
@@ -82,6 +82,13 @@ def abf_to_df(
     df['Filename'] =os.path.basename(filename)
 
     return df
+
+print("""   ***
+Hey just so you know, the web viewer reduces the
+temporal resolution of your data by 1/10. That is, it
+only keeps every 10th point. Keeps things snappy. The
+CSV files still have the full resolution.
+   ***""")
 
 for filename in abf_files:
     csv_outname = filename.replace('.abf', '.csv')
@@ -101,54 +108,49 @@ app = Flask(
 def plot_abf(filename:str):
     trace_selection = alt.selection_interval(encodings = ['x'])
 
-    df = dfs[filename]
-    volts = df['Voltage_Label'][0]
+    df = dfs[filename][::10]
     amps = df['Current_Label'][0]
 
     # full trace
 
-    chart = alt.Chart(df).mark_line(
+    chart = alt.Chart(df, width = 800, height = 600).mark_line(
     ).encode(
         x = 'Time',
         y = alt.Y('Current', title = f'Current ({amps})'),
         color = 'Sweep:N'
     ).add_selection(
         trace_selection
+    ).properties(
+        title = 'Decimated traces'
     )
 
     # mean value
 
-    mean_points = alt.Chart(df).mark_point(
-        size = 100,
-        filled = True
+    mean_points = alt.Chart(df, width = 400, height = 600).mark_errorbar(
+        extent = 'iqr'
     ).encode(
         x = alt.X('Sweep:N', title = 'Sweep Number'),
-        y = alt.Y('mean(Current)', title = f'Mean Current ({volts})', scale = alt.Scale(zero = False)),
-        color = 'Sweep:N',
-        tooltip = alt.Tooltip(['Sweep', 'mean(Current)'], format = ',.2f')
+        y = alt.Y('Current:Q', title = f'Mean Current ({amps})')
     ).transform_filter(
         trace_selection
-    )
-
-    max_points = alt.Chart(df).mark_point(
+    ) + alt.Chart(df).mark_point(
         size = 100,
         filled = True
     ).encode(
         x = alt.X('Sweep:N', title = 'Sweep Number'),
-        y = alt.Y('max(Current)', title = f'Max Current ({volts})', scale = alt.Scale(zero = False)),
+        y = alt.Y('mean(Current)', title = f'Mean Current ({amps})', scale = alt.Scale(zero = False)),
         color = 'Sweep:N',
-        tooltip = alt.Tooltip(['Sweep', 'max(Current)'], format = ',.2f')
+        tooltip = alt.Tooltip(['Sweep', 'min(Current)', 'mean(Current)', 'max(Current)'], format = ',.2f')
     ).transform_filter(
         trace_selection
-    )
-    min_points = alt.Chart(df).mark_point(
-        size = 100,
-        filled = True
+    ).properties(
+        title = 'Mean and IQR'
+    ) + alt.Chart(df).mark_text(
+        align='left', dx = 10
     ).encode(
         x = alt.X('Sweep:N', title = 'Sweep Number'),
-        y = alt.Y('min(Current)', title = f'Min Current ({volts})', scale = alt.Scale(zero = False)),
-        color = 'Sweep:N',
-        tooltip = alt.Tooltip(['Sweep', 'min(Current)'], format = ',.2f')
+        y = alt.Y('mean(Current)', title = f'Mean Current ({amps})', scale = alt.Scale(zero = False)),
+        text = alt.Text('max(Current)', format = ',.0f')
     ).transform_filter(
         trace_selection
     )
@@ -157,7 +159,7 @@ def plot_abf(filename:str):
         processed_html_dir,
         filename.replace('.abf', '.html')
     )
-    alt.hconcat(chart, mean_points, max_points, min_points).save(outfile_name)
+    alt.hconcat(chart, mean_points).save(outfile_name)
 
 @app.route('/', methods = ['GET'])
 def index():
