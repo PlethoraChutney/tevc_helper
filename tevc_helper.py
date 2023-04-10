@@ -150,7 +150,7 @@ def plot_abf(filename:str):
     ).encode(
         x = alt.X('Sweep:N', title = 'Sweep Number'),
         y = alt.Y('mean(Current)', title = f'Mean Current ({amps})', scale = alt.Scale(zero = False)),
-        text = alt.Text('max(Current)', format = ',.0f')
+        text = alt.Text('mean(Current)', format = ',.0f')
     ).transform_filter(
         trace_selection
     )
