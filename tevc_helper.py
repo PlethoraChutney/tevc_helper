@@ -60,11 +60,6 @@ def abf_to_df(
             voltage_label = abf.sweepLabelY
         except ValueError:
             print(f'Warning: failed to access given channel for voltage in {filename}, sweep {sweep}')
-        # try:
-        #     abf.setSweep(sweep, channel = barrel_channel)
-        #     recordings['Barrel'].extend(abf.sweepY)
-        # except ValueError:
-        #     print(f'Warning: failed to access given channel for barrel in {filename}, sweep {sweep}')
 
 
 
@@ -81,7 +76,21 @@ def abf_to_df(
     df['Current_Label'] = re.search('\((.{2})\)', current_label).group(1)
     df['Filename'] =os.path.basename(filename)
 
-    return df
+    if len(abf.sweepList) != 1:
+        # only gap-free recordings have a single sweep
+        print(f'{os.path.basename(filename)} is a voltage sweep file. Saving IV CSV...')
+        df = df[df['Time'].between(0.6, 0.85)]
+        agg_df = df[['Sweep', 'Current', 'Voltage']].groupby('Sweep')
+        agg_df = agg_df.aggregate(['min', 'mean', 'max'])
+        agg_df.columns = agg_df.columns.to_flat_index().str.join('_')
+        agg_df['filename'] = os.path.basename(filename)
+        agg_df = agg_df.reset_index()
+        agg_df = agg_df[['filename', 'Sweep', 'Voltage_min', 'Voltage_mean', 'Voltage_max', 'Current_min', 'Current_mean', 'Current_max']]
+    else:
+        print(f'{os.path.basename(filename)} is gap-free. Continuing...')
+        agg_df = None
+
+    return df, agg_df
 
 print("""   ***
 Hey just so you know, the web viewer reduces the
@@ -90,11 +99,23 @@ only keeps every 10th point. Keeps things snappy. The
 CSV files still have the full resolution.
    ***""")
 
+aggregate_dfs = []
 for filename in abf_files:
     csv_outname = filename.replace('.abf', '.csv')
-    df = abf_to_df(filename)
+    df, agg_df = abf_to_df(filename)
     df.to_csv(csv_outname, index=False)
+    if agg_df is not None:
+        aggregate_dfs.append(agg_df)
+        agg_path = os.path.join(os.path.dirname(filename), 'aggregated')
+        if not os.path.exists(agg_path):
+            os.mkdir(agg_path)
+        agg_df.to_csv(os.path.join(agg_path, os.path.basename(filename).replace('.abf', '_aggregated.csv')), index = False)
+        
     dfs[os.path.basename(filename)] = df
+
+if aggregate_dfs:
+    big_df = pd.concat(*[aggregate_dfs])
+    big_df.to_csv(os.path.join(agg_path, 'combined_aggregates.csv'), index = False)
 
 # -------------------------------
 # Server
