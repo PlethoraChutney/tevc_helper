@@ -20,7 +20,7 @@ except IndexError:
 
 script_location = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if not os.path.exists(processed_html_dir := os.path.join(working_dir, 'processed_html')):
-        os.mkdir(os.path.join(working_dir, 'processed_html'))
+    os.mkdir(os.path.join(working_dir, 'processed_html'))
 
 
 abf_files = [os.path.abspath(os.path.realpath(x)) for x in glob(os.path.join(working_dir, '*.abf'))]
@@ -28,9 +28,8 @@ dfs = {}
 
 def abf_to_df(
     filename:str,
-    current_channel:int = 0,
-    voltage_channel:int = 1
-    # barrel_channel:int = 3
+    current_channel:int = 1,
+    voltage_channel:int = 0
 ) -> pd.DataFrame:
     abf = pyabf.ABF(filename)
 
@@ -109,7 +108,7 @@ for filename in abf_files:
         agg_path = os.path.join(os.path.dirname(filename), 'aggregated')
         if not os.path.exists(agg_path):
             os.mkdir(agg_path)
-        agg_df.to_csv(os.path.join(agg_path, os.path.basename(filename).replace('.abf', '_aggregated.csv')), index = False)
+            agg_df.to_csv(os.path.join(agg_path, os.path.basename(filename).replace('.abf', '_aggregated.csv')), index = False)
         
     dfs[os.path.basename(filename)] = df
 
@@ -130,7 +129,9 @@ def plot_abf(filename:str):
     trace_selection = alt.selection_interval(encodings = ['x'])
 
     df = dfs[filename][::10]
-    amps = df['Current_Label'][0]
+    print(df)
+    amps = df['Current_Label'].iloc[0]
+    # amps = 'Current?'
 
     # full trace
 
