@@ -129,9 +129,7 @@ def plot_abf(filename:str):
     trace_selection = alt.selection_interval(encodings = ['x'])
 
     df = dfs[filename][::10]
-    print(df)
     amps = df['Current_Label'].iloc[0]
-    # amps = 'Current?'
 
     # full trace
 
