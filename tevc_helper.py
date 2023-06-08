@@ -10,7 +10,7 @@ from flask import Flask, render_template, send_from_directory
 
 
 try:
-    working_dir = sys.argv[1]
+    working_dir = os.path.abspath(sys.argv[1])
     if not os.path.exists(working_dir):
         print(f'{working_dir} does not exist.')
         sys.exit(1)
@@ -22,9 +22,7 @@ script_location = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if not os.path.exists(processed_html_dir := os.path.join(working_dir, 'processed_html')):
     os.mkdir(os.path.join(working_dir, 'processed_html'))
 
-
-abf_files = [os.path.abspath(os.path.realpath(x)) for x in glob(os.path.join(working_dir, '*.abf'))]
-dfs = {}
+tag_comment_pattern = re.compile(r'=> ([0-9]) x')
 
 def abf_to_df(
     filename:str,
@@ -76,6 +74,7 @@ def abf_to_df(
     df['Filename'] =os.path.basename(filename)
 
     if len(abf.sweepList) != 1:
+        tags = None
         # only gap-free recordings have a single sweep
         print(f'{os.path.basename(filename)} is a voltage sweep file. Saving IV CSV...')
         df = df[df['Time'].between(0.6, 0.85)]
@@ -86,10 +85,18 @@ def abf_to_df(
         agg_df = agg_df.reset_index()
         agg_df = agg_df[['filename', 'Sweep', 'Voltage_min', 'Voltage_mean', 'Voltage_max', 'Current_min', 'Current_mean', 'Current_max']]
     else:
-        print(f'{os.path.basename(filename)} is gap-free. Continuing...')
+        print(f'{os.path.basename(filename)} is gap-free. Processing tags...')
         agg_df = None
+        tags = [
+            {
+                'Time': abf.tagTimesSec[x],
+                'Selection': re.search(tag_comment_pattern, abf.tagComments[x]).group(1)
+            } for x, _ in enumerate(abf.tagTimesSec)
+        ]
+        tags = pd.DataFrame(tags)
+        print(tags)
 
-    return df, agg_df
+    return df, agg_df, tags
 
 print("""   ***
 Hey just so you know, the web viewer reduces the
@@ -98,10 +105,15 @@ only keeps every 10th point. Keeps things snappy. The
 CSV files still have the full resolution.
    ***""")
 
+
+abf_files = [os.path.abspath(os.path.realpath(x)) for x in glob(os.path.join(working_dir, '*.abf'))]
+dfs = {}
+tags = {}
+
 aggregate_dfs = []
 for filename in abf_files:
     csv_outname = filename.replace('.abf', '.csv')
-    df, agg_df = abf_to_df(filename)
+    df, agg_df, abf_tags = abf_to_df(filename)
     df.to_csv(csv_outname, index=False)
     if agg_df is not None:
         aggregate_dfs.append(agg_df)
@@ -109,6 +121,9 @@ for filename in abf_files:
         if not os.path.exists(agg_path):
             os.mkdir(agg_path)
             agg_df.to_csv(os.path.join(agg_path, os.path.basename(filename).replace('.abf', '_aggregated.csv')), index = False)
+    # export tags for gap-free
+    else:
+        tags[os.path.basename(filename)] = abf_tags
         
     dfs[os.path.basename(filename)] = df
 
@@ -129,20 +144,38 @@ def plot_abf(filename:str):
     trace_selection = alt.selection_interval(encodings = ['x'])
 
     df = dfs[filename][::10]
+    abf_tags = tags[filename]
     amps = df['Current_Label'].iloc[0]
 
     # full trace
 
-    chart = alt.Chart(df, width = 800, height = 600).mark_line(
+    chart = alt.Chart(df, width = 1200, height = 600).mark_line(
     ).encode(
-        x = 'Time',
-        y = alt.Y('Current', title = f'Current ({amps})'),
+        x = alt.X('Time', axis = alt.Axis(grid = False)),
+        y = alt.Y('Current', title = f'Current ({amps})', axis = alt.Axis(grid = False)),
         color = 'Sweep:N'
     ).add_selection(
         trace_selection
     ).properties(
         title = 'Decimated traces'
     )
+
+    if abf_tags is not None:
+        chart = chart + alt.Chart(
+            abf_tags
+        ).mark_rule(
+            strokeDash = [1,2]
+        ).encode(
+            x = alt.X('Time')
+        ) + alt.Chart(
+            abf_tags
+        ).mark_text(
+            fontSize = 20
+        ).encode(
+            x = alt.X('Time'),
+            y = alt.value(25),
+            text = 'Selection'
+        )
 
     # mean value
 
